@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMG FX | Complete Terminal</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <style>
+        :root { --bg: #0e1117; --panel: #161b22; --accent: #58a6ff; --success: #238636; --error: #da3633; --border: #30363d; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: white; margin: 0; padding: 0; overflow-x: hidden; }
+        .flex-center { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        .hidden { display: none !important; }
+
+        /* Full Width Edge-to-Edge Cards */
+        .card { background: var(--panel); padding: 25px; width: 100%; box-sizing: border-box; border-bottom: 1px solid var(--border); }
+        @media (min-width: 600px) { .card { max-width: 500px; margin: 20px auto; border-radius: 12px; border: 1px solid var(--border); } }
+
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid var(--border); background: #0d1117; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; background: var(--accent); color: white; transition: 0.3s; }
+
+        /* Restored Loading Animation */
+        #loading-screen { background: radial-gradient(circle, #1a1d23 0%, #0e1117 100%); position: fixed; width: 100%; height: 100%; z-index: 9999; }
+        .scanner { width: 200px; height: 2px; background: var(--accent); box-shadow: 0 0 15px var(--accent); animation: scan 2s infinite; }
+        @keyframes scan { 0%, 100% { transform: translateY(-40px); opacity: 0.2; } 50% { transform: translateY(40px); opacity: 1; } }
+        #load-msg { font-family: monospace; letter-spacing: 3px; font-weight: bold; animation: glitch 1s infinite; margin-top: 50px; }
+        @keyframes glitch { 0% { transform: skew(0deg); } 20% { transform: skew(-2deg); } 40% { transform: skew(2deg); } 100% { transform: skew(0deg); } }
+
+        /* Dashboard Items */
+        .status-bar { background: var(--panel); padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        #digit-stats-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 15px 0; }
+        .digit-box { background: #0d1117; border: 1px solid var(--border); padding: 8px; border-radius: 4px; text-align: center; font-size: 11px; }
+        .digit-box.best { border-color: var(--success); box-shadow: 0 0 10px var(--success); }
+        .log-view { background: #000; padding: 10px; border-radius: 6px; height: 100px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #8b949e; }
+        
+        #result-overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.5); padding: 30px; border-radius: 20px; z-index: 10000; font-weight: bold; font-size: 24px; opacity: 0; pointer-events: none; transition: 0.3s; }
+        #result-overlay.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    </style>
+</head>
+<body>
+
+<div id="result-overlay">WIN</div>
+
+<div id="loading-screen" class="flex-center">
+    <div class="scanner"></div>
+    <p id="load-msg">AMX ENGINE BOOTING</p>
+</div>
+
+<div id="auth-screen" class="hidden">
+    <div class="card" style="min-height: 100vh; display: flex; flex-direction: column; justify-content: center;">
+        <h2 style="text-align: center; letter-spacing: 2px;">TERMINAL ACCESS</h2>
+        <div id="username-field"><input type="text" id="username" placeholder="Username"></div>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="handleAuth()" id="submit-btn">AUTHORIZE SYSTEM</button>
+        <div onclick="toggleMode()" style="text-align:center; margin-top:20px; cursor:pointer; color:var(--accent); font-size:12px;">SWITCH LOGIN/SIGNUP</div>
+    </div>
+</div>
+
+<div id="main-ui" class="hidden">
+    <div class="status-bar">
+        <div><b id="stat-name">Trader</b><br><span id="deriv-balance" style="color:var(--success)">$0.00</span></div>
+        <button onclick="logout()" style="width:auto; padding:5px 15px; background:transparent; border:1px solid var(--error); color:var(--error); font-size: 11px;">LOGOUT</button>
+    </div>
+
+    <div class="card">
+        <label style="font-size: 10px; color: var(--accent);">ACCOUNT MODE</label>
+        <select id="account-mode" onchange="updateAccountUI()">
+            <option value="demo">DEMO (VIRTUAL)</option>
+            <option value="real">REAL (LIVE FUNDS)</option>
+        </select>
+        <input type="password" id="api-token" placeholder="Deriv API Token">
+        <div style="display:flex; gap:10px;">
+            <input type="number" id="app-id" value="1089">
+            <select id="asset-select">
+                <option value="R_100">Vol 100</option>
+                <option value="1HZ10V">Vol 10(1s)</option>
+            </select>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1"><label style="font-size:10px">STAKE</label><input type="number" id="stake" value="0.35"></div>
+            <div style="flex:1"><label style="font-size:10px">PRED</label><input type="number" id="prediction" value="7"></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <div style="flex:1"><label style="font-size:10px; color:var(--error)">STOP LOSS</label><input type="number" id="stop-loss" value="10"></div>
+            <div style="flex:1"><label style="font-size:10px; color:var(--success)">TAKE PROFIT</label><input type="number" id="take-profit" value="5"></div>
+        </div>
+        <button id="connect-btn" onclick="initDerivBot()" style="margin-top:10px;">ESTABLISH LINK</button>
+    </div>
+
+    <div style="padding: 0 15px;">
+        <div id="digit-stats-container"></div>
+        <div id="price-display" style="font-size:4rem; text-align:center; font-family:monospace; margin:15px 0;">0.0000</div>
+        <button id="exec-btn" onclick="executeTrade()" style="background:var(--success); height:70px; font-size:20px;">EXECUTE CONTRACT</button>
+        <div class="log-view" id="log" style="margin-top:15px;"></div>
+    </div>
+</div>
+
+<script>
+    // --- FIREBASE CONFIG ---
+    const firebaseConfig = { apiKey: "AIzaSyAHl7FQbjolGIC5RvkQ0qp0HvXrHy7ZMKY", authDomain: "amg-fx-bot.firebaseapp.com", projectId: "amg-fx-bot", storageBucket: "amg-fx-bot.firebasestorage.app", messagingSenderId: "256709837381", appId: "1:256709837381:web:0edf9c7bba17a64c54592c" };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    let isLogin = false, derivSocket, digitHistory = [], initialStake = 0.35, sessionProfit = 0;
+
+    // --- 1. RESTORED LOADING & AUTH ---
+    window.onload = () => {
+        setTimeout(() => {
+            auth.onAuthStateChanged(user => {
+                document.getElementById('loading-screen').classList.add('hidden');
+                if (user) {
+                    document.getElementById('main-ui').classList.remove('hidden');
+                    document.getElementById('stat-name').innerText = user.displayName || "Trader";
+                } else { document.getElementById('auth-screen').classList.remove('hidden'); }
+            });
+        }, 2500);
+    };
+
+    function toggleMode() { isLogin = !isLogin; document.getElementById('username-field').classList.toggle('hidden', isLogin); }
+    async function handleAuth() {
+        const e = document.getElementById('email').value, p = document.getElementById('password').value, u = document.getElementById('username').value;
+        try { isLogin ? await auth.signInWithEmailAndPassword(e,p) : await auth.createUserWithEmailAndPassword(e,p).then(r => r.user.updateProfile({displayName:u})); location.reload(); } catch(err){ alert(err.message); }
+    }
+
+    // --- 2. DERIV ENGINE ---
+    function updateAccountUI() {
+        const mode = document.getElementById('account-mode').value;
+        document.getElementById('connect-btn').style.background = mode === 'real' ? 'var(--error)' : 'var(--accent)';
+    }
+
+    function initDerivBot() {
+        const token = document.getElementById('api-token').value, app = document.getElementById('app-id').value;
+        if (!token) return alert("API Token Required");
+        derivSocket = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${app}`);
+        derivSocket.onopen = () => derivSocket.send(JSON.stringify({ authorize: token }));
+        derivSocket.onmessage = (msg) => {
+            const data = JSON.parse(msg.data);
+            if (data.msg_type === 'authorize') {
+                document.getElementById('deriv-balance').innerText = `$${data.authorize.balance}`;
+                document.getElementById('connect-btn').innerText = "LINK ACTIVE";
+                derivSocket.send(JSON.stringify({ ticks: document.getElementById('asset-select').value }));
+                setInterval(() => derivSocket.send(JSON.stringify({ping:1})), 30000);
+            }
+            if (data.msg_type === 'tick') {
+                const p = data.tick.quote.toString();
+                updateAnalyzer(parseInt(p.charAt(p.length - 1)));
+                document.getElementById('price-display').innerText = data.tick.quote;
+            }
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
+                const contract = data.proposal_open_contract;
+                const win = contract.status === 'won';
+                showResult(win);
+                handleMartingale(win);
+                checkSafety(contract.profit);
+            }
+        };
+    }
+
+    function updateAnalyzer(d) {
+        digitHistory.push(d); if(digitHistory.length > 100) digitHistory.shift();
+        const counts = new Array(10).fill(0); digitHistory.forEach(x => counts[x]++);
+        const container = document.getElementById('digit-stats-container');
+        container.innerHTML = '';
+        let min = 101, best = 0;
+        counts.forEach((c,idx) => { if(c < min){ min=c; best=idx; }});
+        counts.forEach((c,idx) => {
+            const isBest = idx === best;
+            container.innerHTML += `<div class="digit-box ${isBest ? 'best' : ''}"><b>${idx}</b><br>${c}%</div>`;
+            if(isBest) document.getElementById('prediction').value = idx;
+        });
+    }
+
+    function executeTrade() {
+        const s = document.getElementById('stake').value, a = document.getElementById('asset-select').value, p = document.getElementById('prediction').value;
+        initialStake = parseFloat(s);
+        derivSocket.send(JSON.stringify({
+            buy: 1, price: s, subscribe: 1,
+            parameters: { amount: s, basis: 'stake', contract_type: 'DIGITDIFF', currency: 'USD', duration: 1, duration_unit: 't', symbol: a, barrier: p }
+        }));
+        log(`Executing: Diff ${p} @ $${s}`);
+    }
+
+    function showResult(win) {
+        const overlay = document.getElementById('result-overlay');
+        overlay.innerText = win ? "PROFIT" : "LOSS";
+        overlay.style.background = win ? "var(--success)" : "var(--error)";
+        overlay.classList.add('show');
+        setTimeout(() => overlay.classList.remove('show'), 2000);
+    }
+
+    function handleMartingale(win) {
+        let cur = parseFloat(document.getElementById('stake').value);
+        document.getElementById('stake').value = win ? initialStake : (cur * 11).toFixed(2);
+        log(win ? "Profit. Stake Reset." : "Loss. Martingale applied (11x).");
+    }
+
+    function checkSafety(profit) {
+        sessionProfit += parseFloat(profit);
+        const sl = parseFloat(document.getElementById('stop-loss').value);
+        const tp = parseFloat(document.getElementById('take-profit').value);
+        if (sessionProfit >= tp || sessionProfit <= (sl * -1)) {
+            alert(`Target Hit: $${sessionProfit.toFixed(2)}. Engine Stop.`);
+            derivSocket.close();
+        }
+    }
+
+    function log(m) { const l = document.getElementById('log'); l.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${m}</div>` + l.innerHTML; }
+    function logout() { auth.signOut().then(() => location.reload()); }
+</script>
+</body>
+</html>
